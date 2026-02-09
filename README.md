@@ -92,9 +92,25 @@ GATEWAY_URL=http://localhost:8080 AGENT_TOKEN=my-secret-agent-token npx tsx exam
 
 Services are defined in `services.yaml` (or set `SERVICES_CONFIG_PATH` env var).
 
+### Global fields
+
+These top-level fields apply to all services unless a service provides its own override.
+
+| Field | Required | Description |
+|---|---|---|
+| `allowed_ips` | No | Global IP allowlist (exact IPs or CIDR ranges) |
+| `allowed_origins` | No | Global Origin header allowlist (exact match) |
+
 ### Example: services.yaml
 
 ```yaml
+# Global allowlists (optional)
+allowed_ips:
+  - 192.168.1.0/24
+  - 10.0.0.5
+allowed_origins:
+  - https://app.example.com
+
 services:
   openai:
     base_url: https://api.openai.com
@@ -145,6 +161,8 @@ services:
 | `allowed_path_prefixes` | No | Restrict URL paths (e.g. `["/v1/"]`) |
 | `timeout_ms` | No | Request timeout (default: 30000) |
 | `rate_limit_per_minute` | No | Simple per-service rate limit |
+| `allowed_ips` | No | IP allowlist (exact or CIDR, e.g. `192.168.1.0/24`). Overrides global. |
+| `allowed_origins` | No | Origin allowlist (exact match). Overrides global. |
 
 ### Auth injection types
 
@@ -228,15 +246,45 @@ Agent Gateway prevents **key leakage through agents**. Specifically:
 
 ### What it does NOT prevent
 
-- **Stolen gateway tokens**: If an attacker obtains the `AGENT_TOKEN`, they can make requests through the gateway. Rate limits mitigate abuse.
+- **Stolen gateway tokens**: If an attacker obtains the `AGENT_TOKEN`, they can make requests through the gateway. Rate limits and IP/Origin allowlists mitigate abuse.
 - **Upstream abuse**: An agent can still make valid but costly API calls. Use `rate_limit_per_minute` and `allowed_path_prefixes` to limit scope.
 - **Response exfiltration**: The agent sees upstream responses. This is by design — the agent needs the data to function.
+
+### IP & Origin allowlists
+
+You can restrict which IPs and origins are allowed to use the gateway. This provides a network-level security layer — even if the agent token is stolen, requests are rejected unless they come from an approved source.
+
+- **Global allowlists** apply to all services unless a service defines its own
+- **Per-service allowlists** fully replace (not merge with) the global lists
+- If no allowlists are configured, all IPs and origins are allowed (backwards compatible)
+- IP allowlists support exact IPs and CIDR notation (e.g. `192.168.1.0/24`)
+- Origin is read from the `Origin` header, falling back to `Referer`
+- The gateway sets `trust proxy` so `req.ip` reflects `X-Forwarded-For` when behind a reverse proxy
+
+```yaml
+# Global: allow this subnet and one specific IP
+allowed_ips:
+  - 192.168.1.0/24
+  - 10.0.0.5
+allowed_origins:
+  - https://app.example.com
+
+services:
+  openai:
+    # This service overrides the global lists entirely
+    allowed_ips:
+      - 10.0.0.10
+    allowed_origins:
+      - https://agent.internal.com
+    ...
+```
 
 ### Hardening recommendations
 
 - Use a strong, random `AGENT_TOKEN`
 - Restrict `allowed_methods` and `allowed_path_prefixes` to the minimum needed
 - Set appropriate `rate_limit_per_minute` values
+- Configure `allowed_ips` and `allowed_origins` to restrict access to known sources
 - Run the gateway in a private network, not on the public internet
 - Rotate `AGENT_TOKEN` regularly
 - Use separate gateway instances for different trust levels

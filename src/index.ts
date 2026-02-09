@@ -12,8 +12,11 @@ function main(): void {
 
   // Load service config
   let services;
+  let globalConfig;
   try {
-    services = loadConfig();
+    const config = loadConfig();
+    services = config.services;
+    globalConfig = config.global;
   } catch (err) {
     console.error(
       "FATAL: Failed to load config:",
@@ -27,6 +30,9 @@ function main(): void {
 
   const app = express();
 
+  // Trust proxy so req.ip reflects X-Forwarded-For when behind a reverse proxy
+  app.set("trust proxy", true);
+
   // Parse JSON bodies with 1MB limit
   app.use(express.json({ limit: "1mb" }));
 
@@ -36,7 +42,7 @@ function main(): void {
   });
 
   // Proxy endpoint — auth required
-  app.post("/v1/proxy/:service", tokenAuth, createProxyHandler(services));
+  app.post("/v1/proxy/:service", tokenAuth, createProxyHandler(services, globalConfig));
 
   const port = parseInt(process.env.PORT ?? "8080", 10);
   app.listen(port, () => {

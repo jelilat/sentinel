@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
-import type { ServiceConfig, ProxyRequestBody } from "./types";
-import { sanitizeHeaders, validateRequest } from "./security";
+import type { GlobalConfig, ServiceConfig, ProxyRequestBody } from "./types";
+import { checkAllowlist, sanitizeHeaders, validateRequest } from "./security";
 import { checkRateLimit } from "./rateLimit";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -18,7 +18,8 @@ function resolveSecret(service: ServiceConfig): string | null {
  * Core proxy handler for POST /v1/proxy/:service.
  */
 export function createProxyHandler(
-  services: Record<string, ServiceConfig>
+  services: Record<string, ServiceConfig>,
+  globalConfig: GlobalConfig
 ) {
   return async (req: Request, res: Response): Promise<void> => {
     const serviceName = req.params.service;
@@ -31,6 +32,13 @@ export function createProxyHandler(
         error: `Unknown service: "${serviceName}"`,
         available: Object.keys(services),
       });
+      return;
+    }
+
+    // Check IP/Origin allowlist
+    const allowlistError = checkAllowlist(req, service, globalConfig);
+    if (allowlistError) {
+      res.status(403).json({ error: allowlistError });
       return;
     }
 

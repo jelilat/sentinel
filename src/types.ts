@@ -24,11 +24,21 @@ export interface ServiceConfig {
   allowed_path_prefixes?: string[];
   timeout_ms?: number;
   rate_limit_per_minute?: number;
+  allowed_ips?: string[];
+  allowed_origins?: string[];
 }
 
 /** Top-level YAML structure. */
 export interface ServicesFile {
   services: Record<string, ServiceConfig>;
+  allowed_ips?: string[];
+  allowed_origins?: string[];
+}
+
+/** Global config fields extracted from the top-level YAML. */
+export interface GlobalConfig {
+  allowed_ips?: string[];
+  allowed_origins?: string[];
 }
 
 /** The JSON body agents send to POST /v1/proxy/:service. */

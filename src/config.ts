@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { parse as parseYaml } from "yaml";
-import type { ServiceConfig, ServicesFile } from "./types";
+import type { GlobalConfig, ServiceConfig, ServicesFile } from "./types";
 
 const REQUIRED_FIELDS: (keyof ServiceConfig)[] = [
   "base_url",
@@ -83,9 +83,21 @@ function validateService(name: string, svc: ServiceConfig): void {
   }
 }
 
+function validateAllowlist(label: string, list: unknown): void {
+  if (list === undefined || list === null) return;
+  if (!Array.isArray(list)) {
+    throw new Error(`${label} must be an array`);
+  }
+  for (const entry of list) {
+    if (typeof entry !== "string") {
+      throw new Error(`${label} entries must be strings`);
+    }
+  }
+}
+
 export function loadConfig(
   configPath?: string
-): Record<string, ServiceConfig> {
+): { services: Record<string, ServiceConfig>; global: GlobalConfig } {
   const resolved = configPath
     ?? process.env.SERVICES_CONFIG_PATH
     ?? "services.yaml";
@@ -105,9 +117,20 @@ export function loadConfig(
     throw new Error("Config must have a top-level 'services' map");
   }
 
+  // Validate global allowlists
+  validateAllowlist("Global allowed_ips", parsed.allowed_ips);
+  validateAllowlist("Global allowed_origins", parsed.allowed_origins);
+
   for (const [name, svc] of Object.entries(parsed.services)) {
     validateService(name, svc);
+    validateAllowlist(`Service "${name}" allowed_ips`, svc.allowed_ips);
+    validateAllowlist(`Service "${name}" allowed_origins`, svc.allowed_origins);
   }
 
-  return parsed.services;
+  const globalConfig: GlobalConfig = {
+    allowed_ips: parsed.allowed_ips,
+    allowed_origins: parsed.allowed_origins,
+  };
+
+  return { services: parsed.services, global: globalConfig };
 }
