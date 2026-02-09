@@ -1,0 +1,23 @@
+{
+  "name": "agent-gateway",
+  "version": "1.0.0",
+  "description": "A proxy server that keeps API keys away from AI agents. Agents send requests here, and the gateway adds the real API key before forwarding to the external service.",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js"
+  },
+  "keywords": ["ai", "agent", "proxy", "gateway", "security", "credentials"],
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.21.0",
+    "yaml": "^2.5.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.14.0",
+    "tsx": "^4.16.0",
+    "typescript": "^5.5.0"
+  }
+}

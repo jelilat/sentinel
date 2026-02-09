@@ -1,0 +1,53 @@
+# Agent Gateway - Service Definitions
+# Each service defines how the gateway proxies and authenticates requests.
+
+services:
+  openai:
+    base_url: https://api.openai.com
+    allowed_hosts:
+      - api.openai.com
+    auth:
+      type: header
+      header_name: Authorization
+      template: "Bearer ${SECRET}"
+    secret_env: OPENAI_API_KEY
+    allowed_methods:
+      - GET
+      - POST
+    allowed_path_prefixes:
+      - /v1/
+    timeout_ms: 60000
+    rate_limit_per_minute: 60
+
+  anthropic:
+    base_url: https://api.anthropic.com
+    allowed_hosts:
+      - api.anthropic.com
+    auth:
+      type: header
+      header_name: x-api-key
+      template: "${SECRET}"
+    secret_env: ANTHROPIC_API_KEY
+    allowed_methods:
+      - POST
+    allowed_path_prefixes:
+      - /v1/
+    timeout_ms: 60000
+    rate_limit_per_minute: 60
+
+  # Example: a generic weather API using query-param auth
+  weather:
+    base_url: https://api.weatherapi.com
+    allowed_hosts:
+      - api.weatherapi.com
+    auth:
+      type: query
+      query_param: key
+      template: "${SECRET}"
+    secret_env: WEATHER_API_KEY
+    allowed_methods:
+      - GET
+    allowed_path_prefixes:
+      - /v1/
+    timeout_ms: 10000
+    rate_limit_per_minute: 30
