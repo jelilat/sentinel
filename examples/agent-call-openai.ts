@@ -1,5 +1,5 @@
 /**
- * Example: An AI agent calling OpenAI through the Agent Gateway.
+ * Example: An AI agent calling OpenAI through Sentinel.
  *
  * The agent only knows the gateway URL and its agent token.
  * It never sees the OpenAI API key.
@@ -17,7 +17,7 @@ if (!AGENT_TOKEN) {
 }
 
 async function main() {
-  console.log("Agent: Calling OpenAI via Agent Gateway (no API key needed)...\n");
+  console.log("Agent: Calling OpenAI via Sentinel (no API key needed)...\n");
 
   const response = await fetch(`${GATEWAY_URL}/v1/proxy/openai`, {
     method: "POST",

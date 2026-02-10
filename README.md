@@ -1,4 +1,4 @@
-# Agent Gateway
+# Sentinel
 
 A proxy server that keeps API keys away from AI agents. Agents send requests here, and the gateway adds the real API key before forwarding to the external service. Agents never touch the actual keys.
 
@@ -12,7 +12,7 @@ AI agents need to call external APIs (OpenAI, Stripe, weather services, etc.), b
 
 ## Solution
 
-Agent Gateway sits between agents and external services. Agents send requests to the gateway with a gateway token. The gateway:
+Sentinel sits between agents and external services. Agents send requests to the gateway with a gateway token. The gateway:
 
 1. Validates the gateway token
 2. Looks up the target service in a YAML config
@@ -21,7 +21,7 @@ Agent Gateway sits between agents and external services. Agents send requests to
 5. Returns the response transparently
 
 ```
-Agent ──(gateway token)──> Agent Gateway ──(real API key)──> External API
+Agent ──(gateway token)──> Sentinel ──(real API key)──> External API
 ```
 
 The agent never sees the real API key. It only knows the gateway URL and its agent token.
@@ -35,32 +35,32 @@ The CLI manages agents and tokens so you don't have to edit YAML by hand.
 ```bash
 npm install
 npm run build
-npm link        # makes 'agent-gateway' available globally (optional)
+npm link        # makes 'sentinel' available globally (optional)
 ```
 
 ### Commands
 
 ```bash
 # Initialize agents.yaml with a default agent (auto-generates token)
-agent-gateway init
+sentinel init
 
 # Add an agent with auto-generated token
-agent-gateway agent add my-agent --services openai,weather
+sentinel agent add my-agent --services openai,weather
 
 # Add an agent with a custom token and rate limit
-agent-gateway agent add restricted-agent --services openai --token agt_custom... --rate-limit 30
+sentinel agent add restricted-agent --services openai --token agt_custom... --rate-limit 30
 
 # Add an agent with IP restrictions
-agent-gateway agent add internal-agent --services openai --allowed-ips 10.0.0.0/24,192.168.1.5
+sentinel agent add internal-agent --services openai --allowed-ips 10.0.0.0/24,192.168.1.5
 
 # List all agents (tokens are masked)
-agent-gateway agent list
+sentinel agent list
 
 # Remove an agent
-agent-gateway agent remove my-agent
+sentinel agent remove my-agent
 
 # Start the gateway server
-agent-gateway start
+sentinel start
 ```
 
 ### How it works
@@ -105,14 +105,14 @@ The gateway starts on port 8080 by default.
 
 ```bash
 # Build
-docker build -t agent-gateway .
+docker build -t sentinel .
 
 # Run
 docker run -p 8080:8080 \
   -e AGENT_TOKEN="my-secret-agent-token" \
   -e OPENAI_API_KEY="sk-..." \
   -v $(pwd)/services.yaml:/app/services.yaml \
-  agent-gateway
+  sentinel
 ```
 
 ### Make a request
@@ -333,7 +333,7 @@ Returns `{"status": "ok", "services": ["openai", ...]}`. No auth required.
 
 ### Threat model
 
-Agent Gateway prevents **key leakage through agents**. Specifically:
+Sentinel prevents **key leakage through agents**. Specifically:
 
 - Agents never receive API keys — keys exist only in the gateway's environment
 - Agents cannot choose which hosts to contact — only services defined in `services.yaml` are reachable
@@ -406,7 +406,8 @@ These headers are always stripped from agent requests:
 
 ```
 ├── src/
-│   ├── cli.ts          # CLI entry point (agent-gateway command)
+│   ├── cli.ts          # CLI entry point (sentinel command)
+
 │   ├── index.ts        # Server bootstrap
 │   ├── types.ts        # TypeScript types
 │   ├── config.ts       # YAML config loader + validation

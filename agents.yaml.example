@@ -5,9 +5,10 @@
 # allowed services, and optional rate limits and IP restrictions.
 #
 # Generate a token:
-#   node -e "console.log('agt_' + require('crypto').randomBytes(24).toString('hex'))"
+#   sentinel init                (creates agents.yaml with a default agent)
+#   sentinel agent add <name>    (auto-generates a token)
 #
-# If agents.yaml does not exist, the gateway falls back to the single
+# If agents.yaml does not exist, Sentinel falls back to the single
 # AGENT_TOKEN environment variable (legacy mode).
 
 agents:

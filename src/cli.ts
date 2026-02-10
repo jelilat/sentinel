@@ -16,8 +16,8 @@ import type { AgentConfig, AgentsFile } from "./types";
 const program = new Command();
 
 program
-  .name("agent-gateway")
-  .description("CLI for managing the Agent Gateway")
+  .name("sentinel")
+  .description("CLI for managing Sentinel")
   .version("1.0.0");
 
 // ── init ────────────────────────────────────────────────────────────────────
@@ -314,7 +314,7 @@ agentCmd
 
 program
   .command("start")
-  .description("Start the Agent Gateway server")
+  .description("Start the Sentinel server")
   .action(() => {
     // Dynamic require so agent-management commands don't load Express
     const { main } = require("./index");

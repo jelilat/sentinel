@@ -1,4 +1,4 @@
-# Agent Gateway - Service Definitions
+# Sentinel - Service Definitions
 # Each service defines how the gateway proxies and authenticates requests.
 
 # Global IP/Origin allowlists (apply to all services unless overridden)

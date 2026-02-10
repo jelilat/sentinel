@@ -76,7 +76,7 @@ export function main(): void {
 
   const port = parseInt(process.env.PORT ?? "8080", 10);
   app.listen(port, () => {
-    console.log(`Agent Gateway listening on port ${port}`);
+    console.log(`Sentinel listening on port ${port}`);
   });
 }
 

@@ -1,10 +1,10 @@
 {
-  "name": "agent-gateway",
+  "name": "sentinel",
   "version": "1.0.0",
   "description": "A proxy server that keeps API keys away from AI agents. Agents send requests here, and the gateway adds the real API key before forwarding to the external service.",
   "main": "dist/index.js",
   "bin": {
-    "agent-gateway": "dist/cli.js"
+    "sentinel": "dist/cli.js"
   },
   "scripts": {
     "build": "tsc",
