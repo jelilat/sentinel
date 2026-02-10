@@ -1,10 +1,10 @@
 # Sentinel
 
-A proxy server that keeps API keys away from AI agents. Agents send requests here, and the gateway adds the real API key before forwarding to the external service. Agents never touch the actual keys.
+A safety layer for autonomous agents. It lets agents interact with real systems without unbounded authority, so you can scale agents without scaling risk.
 
 ## Problem
 
-AI agents need to call external APIs (OpenAI, Stripe, weather services, etc.), but giving agents raw API keys is dangerous:
+AI agents need to make transactions or interact with external systems, but giving agents raw API and wallet private keys is dangerous:
 
 - Keys can leak through agent logs, outputs, or context windows
 - Compromised agents can exfiltrate credentials
