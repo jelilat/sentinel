@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { parse as parseYaml } from "yaml";
-import type { GlobalConfig, ServiceConfig, ServicesFile } from "./types";
+import type { AgentConfig, AgentsFile, GlobalConfig, ResolvedAgent, ServiceConfig, ServicesFile } from "./types";
 
 const REQUIRED_FIELDS: (keyof ServiceConfig)[] = [
   "base_url",
@@ -133,4 +133,79 @@ export function loadConfig(
   };
 
   return { services: parsed.services, global: globalConfig };
+}
+
+/**
+ * Load and validate agents.yaml.
+ * Returns null if the file doesn't exist (triggers legacy mode).
+ * Throws on validation errors.
+ */
+export function loadAgents(
+  configPath?: string
+): Record<string, AgentConfig> | null {
+  const resolved = configPath
+    ?? process.env.AGENTS_CONFIG_PATH
+    ?? "agents.yaml";
+
+  const absolute = path.isAbsolute(resolved)
+    ? resolved
+    : path.resolve(process.cwd(), resolved);
+
+  if (!fs.existsSync(absolute)) {
+    return null;
+  }
+
+  const raw = fs.readFileSync(absolute, "utf-8");
+  const parsed = parseYaml(raw) as AgentsFile;
+
+  if (!parsed?.agents || typeof parsed.agents !== "object") {
+    throw new Error("agents.yaml must have a top-level 'agents' map");
+  }
+
+  for (const [name, agent] of Object.entries(parsed.agents)) {
+    if (!agent.token || typeof agent.token !== "string") {
+      throw new Error(`Agent "${name}": missing or invalid token`);
+    }
+    if (!agent.token.startsWith("agt_")) {
+      throw new Error(`Agent "${name}": token must start with "agt_"`);
+    }
+    if (!Array.isArray(agent.allowed_services) || agent.allowed_services.length === 0) {
+      throw new Error(`Agent "${name}": allowed_services must be a non-empty array`);
+    }
+    for (const svc of agent.allowed_services) {
+      if (typeof svc !== "string") {
+        throw new Error(`Agent "${name}": allowed_services entries must be strings`);
+      }
+    }
+    if (agent.rate_limit_per_minute !== undefined) {
+      if (typeof agent.rate_limit_per_minute !== "number" || agent.rate_limit_per_minute <= 0) {
+        throw new Error(`Agent "${name}": rate_limit_per_minute must be a positive number`);
+      }
+    }
+    validateAllowlist(`Agent "${name}" allowed_ips`, agent.allowed_ips);
+  }
+
+  return parsed.agents;
+}
+
+/**
+ * Build a lookup map from token → ResolvedAgent.
+ * Throws if duplicate tokens are found.
+ */
+export function buildAgentTokenMap(
+  agents: Record<string, AgentConfig>
+): Map<string, ResolvedAgent> {
+  const map = new Map<string, ResolvedAgent>();
+
+  for (const [name, config] of Object.entries(agents)) {
+    if (map.has(config.token)) {
+      const existing = map.get(config.token)!;
+      throw new Error(
+        `Duplicate agent token: agents "${existing.name}" and "${name}" share the same token`
+      );
+    }
+    map.set(config.token, { name, config });
+  }
+
+  return map;
 }

@@ -88,6 +88,50 @@ Notice: **no OpenAI API key anywhere in the agent's request**.
 GATEWAY_URL=http://localhost:8080 AGENT_TOKEN=my-secret-agent-token npx tsx examples/agent-call-openai.ts
 ```
 
+## Per-Agent Tokens
+
+By default, all agents share a single `AGENT_TOKEN`. For better security, you can give each agent its own token with scoped permissions via `agents.yaml`.
+
+### Setup
+
+```bash
+# Generate a token
+node -e "console.log('agt_' + require('crypto').randomBytes(24).toString('hex'))"
+
+# Create agents.yaml (see agents.yaml.example)
+cp agents.yaml.example agents.yaml
+```
+
+### agents.yaml
+
+```yaml
+agents:
+  frontend-agent:
+    token: agt_a1b2c3d4e5f6...
+    allowed_services:
+      - openai
+    rate_limit_per_minute: 30
+    allowed_ips:
+      - 10.0.0.0/24
+
+  data-pipeline:
+    token: agt_x9y8w7v6u5t4...
+    allowed_services:
+      - openai
+      - anthropic
+      - weather
+```
+
+### How scoping works
+
+- **Services**: Each agent can only access services listed in its `allowed_services`. Other services return 403.
+- **Rate limits**: Per-agent `rate_limit_per_minute` is checked *in addition to* per-service limits. Both must pass.
+- **IP allowlists**: Per-agent `allowed_ips` is checked *in addition to* service/global IP allowlists. All must pass.
+
+### Legacy mode
+
+If `agents.yaml` doesn't exist, the gateway falls back to `AGENT_TOKEN` env var. No configuration changes are needed — existing setups work as before.
+
 ## Configuration
 
 Services are defined in `services.yaml` (or set `SERVICES_CONFIG_PATH` env var).
@@ -222,9 +266,10 @@ Returns `{"status": "ok", "services": ["openai", ...]}`. No auth required.
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `AGENT_TOKEN` | Yes | — | Token agents use to authenticate |
+| `AGENT_TOKEN` | If no `agents.yaml` | — | Legacy single token for all agents |
 | `PORT` | No | `8080` | Server port |
-| `SERVICES_CONFIG_PATH` | No | `services.yaml` | Path to config file |
+| `SERVICES_CONFIG_PATH` | No | `services.yaml` | Path to services config file |
+| `AGENTS_CONFIG_PATH` | No | `agents.yaml` | Path to agents config file |
 | `OPENAI_API_KEY` | Per config | — | Example: real OpenAI key |
 
 ## Security
@@ -246,7 +291,7 @@ Agent Gateway prevents **key leakage through agents**. Specifically:
 
 ### What it does NOT prevent
 
-- **Stolen gateway tokens**: If an attacker obtains the `AGENT_TOKEN`, they can make requests through the gateway. Rate limits and IP/Origin allowlists mitigate abuse.
+- **Stolen gateway tokens**: If an attacker obtains a token, they can make requests through the gateway. Per-agent tokens limit blast radius — revoke one agent without affecting others. Rate limits and IP/Origin allowlists further mitigate abuse.
 - **Upstream abuse**: An agent can still make valid but costly API calls. Use `rate_limit_per_minute` and `allowed_path_prefixes` to limit scope.
 - **Response exfiltration**: The agent sees upstream responses. This is by design — the agent needs the data to function.
 
@@ -281,13 +326,14 @@ services:
 
 ### Hardening recommendations
 
-- Use a strong, random `AGENT_TOKEN`
+- Use per-agent tokens (`agents.yaml`) instead of a single shared `AGENT_TOKEN`
+- Scope each agent to only the services it needs via `allowed_services`
+- Set per-agent `rate_limit_per_minute` and `allowed_ips` for defense in depth
 - Restrict `allowed_methods` and `allowed_path_prefixes` to the minimum needed
-- Set appropriate `rate_limit_per_minute` values
+- Set appropriate per-service `rate_limit_per_minute` values
 - Configure `allowed_ips` and `allowed_origins` to restrict access to known sources
 - Run the gateway in a private network, not on the public internet
-- Rotate `AGENT_TOKEN` regularly
-- Use separate gateway instances for different trust levels
+- Rotate agent tokens regularly — each can be rotated independently
 
 ### Header sanitization
 
@@ -306,13 +352,14 @@ These headers are always stripped from agent requests:
 │   ├── index.ts        # Server bootstrap
 │   ├── types.ts        # TypeScript types
 │   ├── config.ts       # YAML config loader + validation
-│   ├── auth.ts         # Token auth middleware
-│   ├── security.ts     # Header sanitization, method/path checks
+│   ├── auth.ts         # Token auth middleware (factory pattern)
+│   ├── security.ts     # Header sanitization, IP checks, method/path checks
 │   ├── rateLimit.ts    # In-memory rate limiter
 │   └── proxy.ts        # Core proxy handler
 ├── examples/
 │   └── agent-call-openai.ts  # Example agent script
 ├── services.yaml       # Service definitions
+├── agents.yaml.example # Per-agent token config example
 ├── Dockerfile
 ├── package.json
 └── tsconfig.json

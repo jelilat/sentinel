@@ -19,6 +19,8 @@ RUN npm ci --omit=dev
 
 COPY --from=builder /app/dist/ dist/
 COPY services.yaml ./
+# Optional: include agents.yaml if it exists (glob trick — no error if missing)
+COPY agents.yam[l] ./
 
 USER node
 

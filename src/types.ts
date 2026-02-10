@@ -48,3 +48,22 @@ export interface ProxyRequestBody {
   headers?: Record<string, string>;
   body?: unknown;
 }
+
+/** A single agent definition from agents.yaml. */
+export interface AgentConfig {
+  token: string;                  // must start with "agt_"
+  allowed_services: string[];     // non-empty, must reference real services
+  rate_limit_per_minute?: number;
+  allowed_ips?: string[];
+}
+
+/** Top-level agents.yaml structure. */
+export interface AgentsFile {
+  agents: Record<string, AgentConfig>;
+}
+
+/** Resolved agent identity attached to a request. */
+export interface ResolvedAgent {
+  name: string;
+  config: AgentConfig;
+}

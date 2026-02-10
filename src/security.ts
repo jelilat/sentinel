@@ -1,6 +1,6 @@
 import net from "net";
 import type { Request } from "express";
-import type { GlobalConfig, ServiceConfig, ProxyRequestBody } from "./types";
+import type { GlobalConfig, ResolvedAgent, ServiceConfig, ProxyRequestBody } from "./types";
 
 /** Headers that agents are never allowed to set. */
 const STRIPPED_HEADERS = new Set([
@@ -141,6 +141,31 @@ export function checkAllowlist(
     if (!effectiveOrigins.includes(normalized)) {
       return `Origin "${normalized}" is not in the allowlist`;
     }
+  }
+
+  return null;
+}
+
+/**
+ * Check per-agent IP allowlist.
+ * Returns null if allowed, or an error string if blocked.
+ * Skips check if agent has no allowed_ips configured.
+ */
+export function checkAgentIpAllowlist(
+  req: Request,
+  agent: ResolvedAgent
+): string | null {
+  const allowedIps = agent.config.allowed_ips;
+  if (!allowedIps || allowedIps.length === 0) return null;
+
+  const clientIp = req.ip;
+  if (!clientIp || !net.isIP(clientIp)) {
+    return "Could not determine client IP";
+  }
+
+  const allowed = allowedIps.some((entry) => ipMatchesEntry(clientIp, entry));
+  if (!allowed) {
+    return `IP ${clientIp} is not in agent "${agent.name}" IP allowlist`;
   }
 
   return null;

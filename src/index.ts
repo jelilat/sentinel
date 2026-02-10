@@ -1,15 +1,10 @@
 import express from "express";
-import { loadConfig } from "./config";
-import { tokenAuth } from "./auth";
+import { loadConfig, loadAgents, buildAgentTokenMap } from "./config";
+import { createTokenAuth } from "./auth";
 import { createProxyHandler } from "./proxy";
+import type { ResolvedAgent } from "./types";
 
 function main(): void {
-  // Validate AGENT_TOKEN is set
-  if (!process.env.AGENT_TOKEN) {
-    console.error("FATAL: AGENT_TOKEN environment variable is required");
-    process.exit(1);
-  }
-
   // Load service config
   let services;
   let globalConfig;
@@ -28,6 +23,40 @@ function main(): void {
   const serviceNames = Object.keys(services);
   console.log(`Loaded ${serviceNames.length} service(s): ${serviceNames.join(", ")}`);
 
+  // Load agents config (null = legacy mode)
+  let agentsByToken: Map<string, ResolvedAgent> | null = null;
+  try {
+    const agents = loadAgents();
+    if (agents) {
+      // Cross-validate: every allowed_service must exist in services config
+      for (const [name, agent] of Object.entries(agents)) {
+        for (const svc of agent.allowed_services) {
+          if (!services[svc]) {
+            throw new Error(
+              `Agent "${name}" references unknown service "${svc}". Available: ${serviceNames.join(", ")}`
+            );
+          }
+        }
+      }
+
+      agentsByToken = buildAgentTokenMap(agents);
+      console.log(`Auth mode: per-agent tokens (${agentsByToken.size} agent(s))`);
+    } else {
+      // Legacy mode: require AGENT_TOKEN
+      if (!process.env.AGENT_TOKEN) {
+        console.error("FATAL: AGENT_TOKEN environment variable is required (no agents.yaml found)");
+        process.exit(1);
+      }
+      console.log("Auth mode: legacy (single AGENT_TOKEN)");
+    }
+  } catch (err) {
+    console.error(
+      "FATAL: Failed to load agents config:",
+      err instanceof Error ? err.message : err
+    );
+    process.exit(1);
+  }
+
   const app = express();
 
   // Trust proxy so req.ip reflects X-Forwarded-For when behind a reverse proxy
@@ -42,7 +71,8 @@ function main(): void {
   });
 
   // Proxy endpoint — auth required
-  app.post("/v1/proxy/:service", tokenAuth, createProxyHandler(services, globalConfig));
+  const authMiddleware = createTokenAuth(agentsByToken);
+  app.post("/v1/proxy/:service", authMiddleware, createProxyHandler(services, globalConfig));
 
   const port = parseInt(process.env.PORT ?? "8080", 10);
   app.listen(port, () => {

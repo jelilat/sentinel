@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
-import type { GlobalConfig, ServiceConfig, ProxyRequestBody } from "./types";
-import { checkAllowlist, sanitizeHeaders, validateRequest } from "./security";
+import type { GlobalConfig, ResolvedAgent, ServiceConfig, ProxyRequestBody } from "./types";
+import { checkAllowlist, checkAgentIpAllowlist, sanitizeHeaders, validateRequest } from "./security";
 import { checkRateLimit } from "./rateLimit";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -24,6 +24,8 @@ export function createProxyHandler(
   return async (req: Request, res: Response): Promise<void> => {
     const serviceName = req.params.service;
     const start = Date.now();
+    const agent = res.locals.agent as ResolvedAgent | undefined;
+    const agentName = agent?.name ?? "legacy";
 
     // Look up service
     const service = services[serviceName];
@@ -35,11 +37,28 @@ export function createProxyHandler(
       return;
     }
 
-    // Check IP/Origin allowlist
+    // Check agent is authorized for this service
+    if (agent && !agent.config.allowed_services.includes(serviceName)) {
+      res.status(403).json({
+        error: `Agent "${agent.name}" is not authorized for service "${serviceName}"`,
+      });
+      return;
+    }
+
+    // Check IP/Origin allowlist (service/global)
     const allowlistError = checkAllowlist(req, service, globalConfig);
     if (allowlistError) {
       res.status(403).json({ error: allowlistError });
       return;
+    }
+
+    // Check per-agent IP allowlist
+    if (agent) {
+      const agentIpError = checkAgentIpAllowlist(req, agent);
+      if (agentIpError) {
+        res.status(403).json({ error: agentIpError });
+        return;
+      }
     }
 
     const body = req.body as ProxyRequestBody;
@@ -51,12 +70,22 @@ export function createProxyHandler(
       return;
     }
 
-    // Rate limit
+    // Service rate limit
     if (!checkRateLimit(serviceName, service.rate_limit_per_minute)) {
       res.status(429).json({
         error: `Rate limit exceeded for service "${serviceName}". Limit: ${service.rate_limit_per_minute}/min`,
       });
       return;
+    }
+
+    // Per-agent rate limit
+    if (agent && agent.config.rate_limit_per_minute) {
+      if (!checkRateLimit(`agent:${agent.name}`, agent.config.rate_limit_per_minute)) {
+        res.status(429).json({
+          error: `Rate limit exceeded for agent "${agent.name}". Limit: ${agent.config.rate_limit_per_minute}/min`,
+        });
+        return;
+      }
     }
 
     // Resolve secret
@@ -106,6 +135,7 @@ export function createProxyHandler(
       // Log metadata only (never secrets or bodies)
       console.log(
         JSON.stringify({
+          agent: agentName,
           service: serviceName,
           method,
           path: body.path,
@@ -134,6 +164,7 @@ export function createProxyHandler(
 
       console.log(
         JSON.stringify({
+          agent: agentName,
           service: serviceName,
           method,
           path: body.path,

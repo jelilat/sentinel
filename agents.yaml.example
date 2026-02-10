@@ -1,0 +1,29 @@
+# Per-agent token configuration.
+# Copy this file to agents.yaml and customize.
+#
+# Each agent gets a unique token (must start with "agt_"), a list of
+# allowed services, and optional rate limits and IP restrictions.
+#
+# Generate a token:
+#   node -e "console.log('agt_' + require('crypto').randomBytes(24).toString('hex'))"
+#
+# If agents.yaml does not exist, the gateway falls back to the single
+# AGENT_TOKEN environment variable (legacy mode).
+
+agents:
+  frontend-agent:
+    token: agt_a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6
+    allowed_services:
+      - openai
+    rate_limit_per_minute: 30
+    allowed_ips:
+      - 10.0.0.0/24
+
+  data-pipeline:
+    token: agt_x9y8w7v6u5t4x9y8w7v6u5t4x9y8w7v6u5t4x9y8w7v6u5t4
+    allowed_services:
+      - openai
+      - anthropic
+      - weather
+    # No rate_limit_per_minute — uses only the per-service limit
+    # No allowed_ips — accepts requests from any IP
