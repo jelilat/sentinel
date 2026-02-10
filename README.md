@@ -26,6 +26,59 @@ Agent ──(gateway token)──> Agent Gateway ──(real API key)──> Ext
 
 The agent never sees the real API key. It only knows the gateway URL and its agent token.
 
+## CLI
+
+The CLI manages agents and tokens so you don't have to edit YAML by hand.
+
+### Install
+
+```bash
+npm install
+npm run build
+npm link        # makes 'agent-gateway' available globally (optional)
+```
+
+### Commands
+
+```bash
+# Initialize agents.yaml with a default agent (auto-generates token)
+agent-gateway init
+
+# Add an agent with auto-generated token
+agent-gateway agent add my-agent --services openai,weather
+
+# Add an agent with a custom token and rate limit
+agent-gateway agent add restricted-agent --services openai --token agt_custom... --rate-limit 30
+
+# Add an agent with IP restrictions
+agent-gateway agent add internal-agent --services openai --allowed-ips 10.0.0.0/24,192.168.1.5
+
+# List all agents (tokens are masked)
+agent-gateway agent list
+
+# Remove an agent
+agent-gateway agent remove my-agent
+
+# Start the gateway server
+agent-gateway start
+```
+
+### How it works
+
+- **`init`** creates `agents.yaml` with a `default-agent` that has access to all services in `services.yaml`. The token is printed once — save it.
+- **`agent add`** validates `--services` against `services.yaml` and auto-generates a token (or use `--token` to supply your own). The token is printed once.
+- **`agent list`** shows all agents in a table with masked tokens (`agt_a1b2...e5f6`).
+- **`agent remove`** removes an agent from the file.
+- **`start`** starts the gateway server (same as `npm start`).
+
+### Development
+
+```bash
+# Run CLI commands without building
+npx tsx src/cli.ts init
+npx tsx src/cli.ts agent add test --services openai
+```
+
 ## Quickstart
 
 ### Local (Node.js)
@@ -34,11 +87,15 @@ The agent never sees the real API key. It only knows the gateway URL and its age
 # Install dependencies
 npm install
 
-# Set required env vars
-export AGENT_TOKEN="my-secret-agent-token"
-export OPENAI_API_KEY="sk-..."  # your real OpenAI key
+# Option 1: Use the CLI (recommended)
+npm run build
+node dist/cli.js init
+export OPENAI_API_KEY="sk-..."
+node dist/cli.js start
 
-# Start the gateway
+# Option 2: Legacy mode with shared token
+export AGENT_TOKEN="my-secret-agent-token"
+export OPENAI_API_KEY="sk-..."
 npm run dev
 ```
 
@@ -349,9 +406,12 @@ These headers are always stripped from agent requests:
 
 ```
 ├── src/
+│   ├── cli.ts          # CLI entry point (agent-gateway command)
 │   ├── index.ts        # Server bootstrap
 │   ├── types.ts        # TypeScript types
 │   ├── config.ts       # YAML config loader + validation
+│   ├── agentFile.ts    # YAML read/write for agents.yaml
+│   ├── tokenGen.ts     # Token generation utility
 │   ├── auth.ts         # Token auth middleware (factory pattern)
 │   ├── security.ts     # Header sanitization, IP checks, method/path checks
 │   ├── rateLimit.ts    # In-memory rate limiter

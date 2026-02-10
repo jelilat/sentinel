@@ -4,7 +4,7 @@ import { createTokenAuth } from "./auth";
 import { createProxyHandler } from "./proxy";
 import type { ResolvedAgent } from "./types";
 
-function main(): void {
+export function main(): void {
   // Load service config
   let services;
   let globalConfig;
@@ -80,4 +80,7 @@ function main(): void {
   });
 }
 
-main();
+// Auto-run when executed directly (node dist/index.js), but not when imported by CLI
+if (require.main === module) {
+  main();
+}
