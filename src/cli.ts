@@ -2,7 +2,7 @@
 
 import { Command } from "commander";
 import { loadConfig } from "./config";
-import { generateToken } from "./tokenGen";
+import { generateToken, maskToken } from "./tokenGen";
 import {
   agentsFileExists,
   addAgent,
@@ -271,12 +271,6 @@ agentCmd
     if (entries.length === 0) {
       console.log("No agents configured.");
       return;
-    }
-
-    // Mask token: show first 6 chars + "..." + last 4 chars
-    function maskToken(token: string): string {
-      if (token.length <= 14) return token.slice(0, 6) + "...";
-      return token.slice(0, 8) + "..." + token.slice(-4);
     }
 
     // Build table rows

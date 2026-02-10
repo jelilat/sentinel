@@ -3,3 +3,5 @@ dist/
 .env
 *.log
 agents.yaml
+dashboard/node_modules/
+dashboard/dist/

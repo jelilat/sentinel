@@ -13,3 +13,11 @@ export function generateToken(): string {
 export function isValidTokenFormat(token: string): boolean {
   return /^agt_[0-9a-f]{48}$/.test(token);
 }
+
+/**
+ * Mask a token for display: show first 8 chars + "..." + last 4 chars.
+ */
+export function maskToken(token: string): string {
+  if (token.length <= 14) return token.slice(0, 6) + "...";
+  return token.slice(0, 8) + "..." + token.slice(-4);
+}

@@ -1,7 +1,9 @@
+import path from "path";
 import express from "express";
 import { loadConfig, loadAgents, buildAgentTokenMap } from "./config";
 import { createTokenAuth } from "./auth";
 import { createProxyHandler } from "./proxy";
+import { createAdminRouter } from "./adminApi";
 import type { ResolvedAgent } from "./types";
 
 export function main(): void {
@@ -64,6 +66,17 @@ export function main(): void {
 
   // Parse JSON bodies with 1MB limit
   app.use(express.json({ limit: "1mb" }));
+
+  // Dashboard + Admin API (opt-in: only when ADMIN_TOKEN is set)
+  if (process.env.ADMIN_TOKEN) {
+    app.use("/api", createAdminRouter());
+    const dashboardPath = path.join(__dirname, "..", "dashboard", "dist");
+    app.use(express.static(dashboardPath));
+    app.get(/^\/(?!api|v1|health).*/, (_req, res) => {
+      res.sendFile(path.join(dashboardPath, "index.html"));
+    });
+    console.log("Dashboard enabled (ADMIN_TOKEN set)");
+  }
 
   // Health check (no auth required)
   app.get("/health", (_req, res) => {
