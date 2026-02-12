@@ -2,8 +2,10 @@ import crypto from "crypto";
 import { Router } from "express";
 import { createAdminAuth } from "./adminAuth";
 import { listAgents, addAgent, updateAgent, removeAgent } from "./agentFile";
+import { addService, updateService, removeService, listServices } from "./serviceFile";
+import { validateService, loadConfig } from "./config";
 import { generateToken, maskToken } from "./tokenGen";
-import { loadConfig } from "./config";
+import type { ServiceConfig } from "./types";
 
 const startTime = Date.now();
 
@@ -223,24 +225,94 @@ export function createAdminRouter(): Router {
     res.json({ name, token: newToken });
   });
 
-  // GET /api/services — list services (sanitized)
+  // GET /api/services — list services (full config)
   router.get("/services", (_req, res) => {
     try {
-      const { services } = loadConfig();
+      const services = listServices();
       const result = Object.entries(services).map(([name, svc]) => ({
         name,
-        base_url: svc.base_url,
-        allowed_hosts: svc.allowed_hosts,
-        auth_type: svc.auth.type,
-        allowed_methods: svc.allowed_methods,
-        allowed_path_prefixes: svc.allowed_path_prefixes,
-        timeout_ms: svc.timeout_ms,
-        rate_limit_per_minute: svc.rate_limit_per_minute,
+        ...svc,
       }));
       res.json(result);
     } catch (err) {
       res.status(500).json({ error: err instanceof Error ? err.message : "Failed to load services" });
     }
+  });
+
+  // POST /api/services — create service
+  router.post("/services", (req, res) => {
+    const { name, ...config } = req.body;
+
+    if (!name || typeof name !== "string") {
+      res.status(400).json({ error: "Missing or invalid 'name'" });
+      return;
+    }
+
+    try {
+      validateService(name, config as ServiceConfig);
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : "Invalid service config" });
+      return;
+    }
+
+    try {
+      addService(name, config as ServiceConfig);
+    } catch (err) {
+      res.status(409).json({ error: err instanceof Error ? err.message : "Failed to add service" });
+      return;
+    }
+
+    res.status(201).json({ name, ...config });
+  });
+
+  // PATCH /api/services/:name — update service fields
+  router.patch("/services/:name", (req, res) => {
+    const { name } = req.params;
+    const updates = req.body as Partial<ServiceConfig>;
+
+    if (Object.keys(updates).length === 0) {
+      res.status(400).json({ error: "No updates provided" });
+      return;
+    }
+
+    try {
+      updateService(name, updates);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to update service";
+      const status = message.includes("not found") ? 404 : 400;
+      res.status(status).json({ error: message });
+      return;
+    }
+
+    res.json({ ok: true, name });
+  });
+
+  // DELETE /api/services/:name — remove service (blocked if agents reference it)
+  router.delete("/services/:name", (req, res) => {
+    const { name } = req.params;
+
+    // Check if any agents reference this service
+    const agents = listAgents();
+    const dependentAgents = Object.entries(agents)
+      .filter(([, agent]) => agent.allowed_services.includes(name))
+      .map(([agentName]) => agentName);
+
+    if (dependentAgents.length > 0) {
+      res.status(409).json({
+        error: `Cannot delete service "${name}": referenced by agents: ${dependentAgents.join(", ")}`,
+        dependent_agents: dependentAgents,
+      });
+      return;
+    }
+
+    try {
+      removeService(name);
+    } catch (err) {
+      res.status(404).json({ error: err instanceof Error ? err.message : "Failed to remove service" });
+      return;
+    }
+
+    res.json({ ok: true, name });
   });
 
   // GET /api/health — status info

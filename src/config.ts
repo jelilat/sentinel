@@ -10,7 +10,7 @@ const REQUIRED_FIELDS: (keyof ServiceConfig)[] = [
   "secret_env",
 ];
 
-function validateService(name: string, svc: ServiceConfig): void {
+export function validateService(name: string, svc: ServiceConfig): void {
   for (const field of REQUIRED_FIELDS) {
     if (svc[field] === undefined || svc[field] === null) {
       throw new Error(`Service "${name}" is missing required field "${field}"`);

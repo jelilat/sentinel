@@ -1,6 +1,12 @@
+import { Link } from "react-router-dom";
 import type { Service } from "../types";
 
-export default function ServiceCard({ service }: { service: Service }) {
+interface Props {
+  service: Service;
+  onDelete: () => void;
+}
+
+export default function ServiceCard({ service, onDelete }: Props) {
   return (
     <div className="service-card">
       <h3>{service.name}</h3>
@@ -12,7 +18,27 @@ export default function ServiceCard({ service }: { service: Service }) {
         <dd>{service.allowed_hosts.join(", ")}</dd>
 
         <dt>Auth Type</dt>
-        <dd>{service.auth_type}</dd>
+        <dd>{service.auth.type}</dd>
+
+        {service.auth.type === "header" && service.auth.header_name && (
+          <>
+            <dt>Header</dt>
+            <dd>{service.auth.header_name}</dd>
+          </>
+        )}
+
+        {service.auth.type === "query" && service.auth.query_param && (
+          <>
+            <dt>Query Param</dt>
+            <dd>{service.auth.query_param}</dd>
+          </>
+        )}
+
+        <dt>Template</dt>
+        <dd>{service.auth.template}</dd>
+
+        <dt>Secret Env</dt>
+        <dd>{service.secret_env}</dd>
 
         {service.allowed_methods && (
           <>
@@ -42,6 +68,14 @@ export default function ServiceCard({ service }: { service: Service }) {
           </>
         )}
       </dl>
+      <div className="card-actions">
+        <Link to={`/services/${encodeURIComponent(service.name)}`} className="btn-small">
+          Edit
+        </Link>
+        <button className="btn-small btn-danger" onClick={onDelete}>
+          Delete
+        </button>
+      </div>
     </div>
   );
 }

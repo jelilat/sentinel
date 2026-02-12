@@ -10,11 +10,19 @@ export interface NewAgent extends Agent {
   // token is the full token (shown once after creation/rotation)
 }
 
+export interface ServiceAuth {
+  type: "header" | "query";
+  header_name?: string;
+  query_param?: string;
+  template: string;
+}
+
 export interface Service {
   name: string;
   base_url: string;
   allowed_hosts: string[];
-  auth_type: string;
+  auth: ServiceAuth;
+  secret_env: string;
   allowed_methods?: string[];
   allowed_path_prefixes?: string[];
   timeout_ms?: number;
