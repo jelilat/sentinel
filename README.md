@@ -1,134 +1,92 @@
 # Sentinel
 
-A safety layer for autonomous agents. It lets agents interact with real systems without unbounded authority, so you can scale agents without scaling risk.
+**Stop giving AI agents your API and wallet private keys.**
 
-## Problem
-
-AI agents need to make transactions or interact with external systems, but giving agents raw API and wallet private keys is dangerous:
-
-- Keys can leak through agent logs, outputs, or context windows
-- Compromised agents can exfiltrate credentials
-- There's no central chokepoint for access control
-
-## Solution
-
-Sentinel sits between agents and external services. Agents send requests to the gateway with a gateway token. The gateway:
-
-1. Validates the gateway token
-2. Looks up the target service in a YAML config
-3. Injects the real API key from server-side environment variables
-4. Forwards the request to the upstream service
-5. Returns the response transparently
+Sentinel is a proxy that sits between your agents and external services. Your agents get a scoped gateway token. Sentinel holds the real credentials — API keys, private keys, secrets — injects them server-side, and forwards requests. If an agent is compromised, you revoke one token. The real keys never moved.
 
 ```
-Agent ──(gateway token)──> Sentinel ──(real API key)──> External API
+Agent ──(gateway token)──> Sentinel ──(real credentials)──> OpenAI / Stripe / Blockchain RPC / etc.
 ```
 
-The agent never sees the real API key. It only knows the gateway URL and its agent token.
+## Why
 
-## CLI
+AI agents need to call external APIs and sign transactions, but giving them raw keys is dangerous:
 
-The CLI manages agents and tokens so you don't have to edit YAML by hand.
+- Keys leak through agent logs, outputs, and context windows
+- Prompt injection can trick agents into exposing credentials
+- A compromised agent means a compromised key — and you have to rotate it everywhere
+- A leaked private key can drain a wallet instantly with no way to undo it
 
-### Install
+Sentinel gives you a single chokepoint: **one place to grant access, set limits, and revoke tokens — without touching the underlying API keys.**
 
-```bash
-npm install
-npm run build
-npm link        # makes 'sentinel' available globally (optional)
-```
+## What you get
 
-### Commands
-
-```bash
-# Initialize agents.yaml with a default agent (auto-generates token)
-sentinel init
-
-# Add an agent with auto-generated token
-sentinel agent add my-agent --services openai,weather
-
-# Add an agent with a custom token and rate limit
-sentinel agent add restricted-agent --services openai --token agt_custom... --rate-limit 30
-
-# Add an agent with IP restrictions
-sentinel agent add internal-agent --services openai --allowed-ips 10.0.0.0/24,192.168.1.5
-
-# List all agents (tokens are masked)
-sentinel agent list
-
-# Remove an agent
-sentinel agent remove my-agent
-
-# Start the gateway server
-sentinel start
-```
-
-### How it works
-
-- **`init`** creates `agents.yaml` with a `default-agent` that has access to all services in `services.yaml`. The token is printed once — save it.
-- **`agent add`** validates `--services` against `services.yaml` and auto-generates a token (or use `--token` to supply your own). The token is printed once.
-- **`agent list`** shows all agents in a table with masked tokens (`agt_a1b2...e5f6`).
-- **`agent remove`** removes an agent from the file.
-- **`start`** starts the gateway server (same as `npm start`).
-
-### Development
-
-```bash
-# Run CLI commands without building
-npx tsx src/cli.ts init
-npx tsx src/cli.ts agent add test --services openai
-```
+- **Key isolation** — Agents never see real API keys. Keys stay in server-side environment variables.
+- **Per-agent tokens** — Each agent gets its own token, scoped to specific services. Revoke one without affecting others.
+- **Rate limiting** — Per-agent and per-service rate limits.
+- **IP allowlists** — Restrict which IPs can use each agent token.
+- **Path & method restrictions** — Lock agents to specific endpoints (e.g. only `POST /v1/chat/completions`).
+- **Header sanitization** — Auth headers from agents are stripped automatically. Agents can't override injected credentials.
+- **Dashboard** — Web UI to manage agents, services, and tokens.
+- **CLI** — Manage everything from the terminal.
 
 ## Quickstart
 
-### Local (Node.js)
+### 1. Install and build
 
 ```bash
-# Install dependencies
+git clone https://github.com/AgenHub/sentinel.git
+cd sentinel
 npm install
-
-# Option 1: Use the CLI (recommended)
 npm run build
-node dist/cli.js init
-export OPENAI_API_KEY="sk-..."
-node dist/cli.js start
-
-# Option 2: Legacy mode with shared token
-export AGENT_TOKEN="my-secret-agent-token"
-export OPENAI_API_KEY="sk-..."
-npm run dev
 ```
 
-The gateway starts on port 8080 by default.
+### 2. Set up your services
 
-### Docker
+Edit `services.yaml` to define which APIs Sentinel can reach:
+
+```yaml
+services:
+  openai:
+    base_url: https://api.openai.com
+    allowed_hosts:
+      - api.openai.com
+    auth:
+      type: header
+      header_name: Authorization
+      template: "Bearer ${SECRET}"
+    secret_env: OPENAI_API_KEY
+    allowed_methods:
+      - POST
+    allowed_path_prefixes:
+      - /v1/
+    rate_limit_per_minute: 60
+```
+
+### 3. Create an agent and start
 
 ```bash
-# Build
-docker build -t sentinel .
+export OPENAI_API_KEY="sk-..."         # Your real key (stays on the server)
+export ADMIN_TOKEN="pick-a-password"   # Enables the web dashboard
 
-# Run
-docker run -p 8080:8080 \
-  -e AGENT_TOKEN="my-secret-agent-token" \
-  -e OPENAI_API_KEY="sk-..." \
-  -v $(pwd)/services.yaml:/app/services.yaml \
-  sentinel
+node dist/cli.js init                  # Creates an agent + prints its token
+node dist/cli.js start                 # Starts Sentinel on port 8080
 ```
 
-### Make a request
+Save the token it prints — that's what you give your agent.
 
-Agents call the gateway like this:
+### 4. Make a request
+
+Your agent calls Sentinel like this — **no API key needed**:
 
 ```bash
 curl -X POST http://localhost:8080/v1/proxy/openai \
   -H "Content-Type: application/json" \
-  -H "x-agent-token: my-secret-agent-token" \
+  -H "x-agent-token: <agent-token-from-step-3>" \
   -d '{
     "method": "POST",
     "path": "/v1/chat/completions",
-    "headers": {
-      "Content-Type": "application/json"
-    },
+    "headers": { "Content-Type": "application/json" },
     "body": {
       "model": "gpt-4o-mini",
       "messages": [{"role": "user", "content": "Hello!"}],
@@ -137,29 +95,88 @@ curl -X POST http://localhost:8080/v1/proxy/openai \
   }'
 ```
 
-Notice: **no OpenAI API key anywhere in the agent's request**.
-
-### Example agent script
+### Docker
 
 ```bash
-GATEWAY_URL=http://localhost:8080 AGENT_TOKEN=my-secret-agent-token npx tsx examples/agent-call-openai.ts
+cp .env.example .env           # Add your API keys
+docker compose up -d           # Start Sentinel
 ```
 
-## Per-Agent Tokens
+The dashboard is available at `http://localhost:8080`.
 
-By default, all agents share a single `AGENT_TOKEN`. For better security, you can give each agent its own token with scoped permissions via `agents.yaml`.
+## CLI
 
-### Setup
+Manage agents and tokens from the terminal.
 
 ```bash
-# Generate a token
-node -e "console.log('agt_' + require('crypto').randomBytes(24).toString('hex'))"
-
-# Create agents.yaml (see agents.yaml.example)
-cp agents.yaml.example agents.yaml
+sentinel init                                          # Create agents.yaml with a default agent
+sentinel agent add my-agent --services openai,weather  # Add agent with scoped access
+sentinel agent add locked --services openai --rate-limit 30 --allowed-ips 10.0.0.0/24
+sentinel agent list                                    # List all agents (tokens masked)
+sentinel agent update my-agent --rotate-token          # Rotate a compromised token
+sentinel agent remove my-agent                         # Remove an agent
+sentinel start                                         # Start the server
 ```
+
+During development, run without building:
+
+```bash
+npx tsx src/cli.ts init
+npx tsx src/cli.ts agent add test --services openai
+```
+
+## Self-Hosting
+
+Deploy Sentinel on your own infrastructure with Docker, Railway, Render, or Fly.io.
+
+See the **[Self-Hosting Guide](SELF-HOSTING.md)** for step-by-step instructions and a production security checklist.
+
+> **Important:** Always run Sentinel on a separate server from your agents. If they share a machine, the agent can read your `.env` file and the security model breaks.
+
+## Configuration
+
+### services.yaml
+
+Defines which external APIs Sentinel can reach. Each service specifies how to authenticate with the upstream API.
+
+```yaml
+services:
+  openai:
+    base_url: https://api.openai.com
+    allowed_hosts:
+      - api.openai.com
+    auth:
+      type: header               # "header" or "query"
+      header_name: Authorization
+      template: "Bearer ${SECRET}"
+    secret_env: OPENAI_API_KEY   # Environment variable holding the real key
+    allowed_methods:             # Optional: restrict HTTP methods
+      - POST
+    allowed_path_prefixes:       # Optional: restrict URL paths
+      - /v1/
+    timeout_ms: 60000            # Optional: request timeout (default 30s)
+    rate_limit_per_minute: 60    # Optional: per-service rate limit
+```
+
+| Field | Required | Description |
+|---|---|---|
+| `base_url` | Yes | Upstream base URL (must be https) |
+| `allowed_hosts` | Yes | Host allowlist (must include base_url host) |
+| `auth.type` | Yes | `"header"` or `"query"` |
+| `auth.header_name` | If header | Header name to inject (e.g. `Authorization`) |
+| `auth.query_param` | If query | Query parameter name to inject |
+| `auth.template` | Yes | Template with `${SECRET}` placeholder |
+| `secret_env` | Yes | Environment variable holding the real API key |
+| `allowed_methods` | No | Restrict HTTP methods (e.g. `["GET", "POST"]`) |
+| `allowed_path_prefixes` | No | Restrict URL paths (e.g. `["/v1/"]`) |
+| `timeout_ms` | No | Request timeout (default: 30000) |
+| `rate_limit_per_minute` | No | Per-service rate limit |
+| `allowed_ips` | No | IP allowlist (overrides global) |
+| `allowed_origins` | No | Origin allowlist (overrides global) |
 
 ### agents.yaml
+
+Each agent gets a unique token and scoped permissions. Created via the CLI or dashboard.
 
 ```yaml
 agents:
@@ -176,121 +193,30 @@ agents:
     allowed_services:
       - openai
       - anthropic
-      - weather
 ```
 
-### How scoping works
+If `agents.yaml` doesn't exist, Sentinel falls back to the `AGENT_TOKEN` env var (legacy single-token mode).
 
-- **Services**: Each agent can only access services listed in its `allowed_services`. Other services return 403.
-- **Rate limits**: Per-agent `rate_limit_per_minute` is checked *in addition to* per-service limits. Both must pass.
-- **IP allowlists**: Per-agent `allowed_ips` is checked *in addition to* service/global IP allowlists. All must pass.
+### Environment variables
 
-### Legacy mode
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `ADMIN_TOKEN` | No | — | Enables the dashboard and admin API |
+| `AGENT_TOKEN` | If no `agents.yaml` | — | Legacy single token for all agents |
+| `PORT` | No | `8080` | Server port |
+| `SERVICES_CONFIG_PATH` | No | `services.yaml` | Path to services config |
+| `AGENTS_CONFIG_PATH` | No | `agents.yaml` | Path to agents config |
 
-If `agents.yaml` doesn't exist, the gateway falls back to `AGENT_TOKEN` env var. No configuration changes are needed — existing setups work as before.
-
-## Configuration
-
-Services are defined in `services.yaml` (or set `SERVICES_CONFIG_PATH` env var).
-
-### Global fields
-
-These top-level fields apply to all services unless a service provides its own override.
-
-| Field | Required | Description |
-|---|---|---|
-| `allowed_ips` | No | Global IP allowlist (exact IPs or CIDR ranges) |
-| `allowed_origins` | No | Global Origin header allowlist (exact match) |
-
-### Example: services.yaml
-
-```yaml
-# Global allowlists (optional)
-allowed_ips:
-  - 192.168.1.0/24
-  - 10.0.0.5
-allowed_origins:
-  - https://app.example.com
-
-services:
-  openai:
-    base_url: https://api.openai.com
-    allowed_hosts:
-      - api.openai.com
-    auth:
-      type: header
-      header_name: Authorization
-      template: "Bearer ${SECRET}"
-    secret_env: OPENAI_API_KEY
-    allowed_methods:
-      - GET
-      - POST
-    allowed_path_prefixes:
-      - /v1/
-    timeout_ms: 60000
-    rate_limit_per_minute: 60
-
-  weather:
-    base_url: https://api.weatherapi.com
-    allowed_hosts:
-      - api.weatherapi.com
-    auth:
-      type: query
-      query_param: key
-      template: "${SECRET}"
-    secret_env: WEATHER_API_KEY
-    allowed_methods:
-      - GET
-    allowed_path_prefixes:
-      - /v1/
-    timeout_ms: 10000
-    rate_limit_per_minute: 30
-```
-
-### Service fields
-
-| Field | Required | Description |
-|---|---|---|
-| `base_url` | Yes | Upstream base URL (must be https) |
-| `allowed_hosts` | Yes | Host allowlist (must include base_url host) |
-| `auth.type` | Yes | `"header"` or `"query"` |
-| `auth.header_name` | If header | Header name to inject (e.g. `Authorization`) |
-| `auth.query_param` | If query | Query parameter name to inject |
-| `auth.template` | Yes | Template with `${SECRET}` placeholder |
-| `secret_env` | Yes | Environment variable holding the real API key |
-| `allowed_methods` | No | Restrict HTTP methods (e.g. `["GET", "POST"]`) |
-| `allowed_path_prefixes` | No | Restrict URL paths (e.g. `["/v1/"]`) |
-| `timeout_ms` | No | Request timeout (default: 30000) |
-| `rate_limit_per_minute` | No | Simple per-service rate limit |
-| `allowed_ips` | No | IP allowlist (exact or CIDR, e.g. `192.168.1.0/24`). Overrides global. |
-| `allowed_origins` | No | Origin allowlist (exact match). Overrides global. |
-
-### Auth injection types
-
-**Header injection** — injects the secret as an HTTP header:
-
-```yaml
-auth:
-  type: header
-  header_name: Authorization
-  template: "Bearer ${SECRET}"
-```
-
-**Query injection** — injects the secret as a URL query parameter:
-
-```yaml
-auth:
-  type: query
-  query_param: key
-  template: "${SECRET}"
-```
+Plus any keys referenced by `secret_env` in your services (e.g. `OPENAI_API_KEY`).
 
 ## API
 
 ### `POST /v1/proxy/:service`
 
+Proxy a request through Sentinel to an upstream service.
+
 **Headers:**
-- `x-agent-token` (required): Gateway authentication token
+- `x-agent-token` (required) — Agent's gateway token
 - `Content-Type: application/json`
 
 **Body:**
@@ -299,160 +225,79 @@ auth:
 {
   "method": "POST",
   "path": "/v1/chat/completions",
-  "headers": {
-    "Content-Type": "application/json"
-  },
-  "body": { ... }
+  "headers": { "Content-Type": "application/json" },
+  "body": { "model": "gpt-4o-mini", "messages": [...] }
 }
 ```
 
 | Field | Required | Description |
 |---|---|---|
-| `method` | Yes | HTTP method (`GET`, `POST`, `PUT`, `DELETE`, etc.) |
+| `method` | Yes | HTTP method |
 | `path` | Yes | Relative path (must start with `/`) |
 | `headers` | No | Additional headers (auth headers are stripped) |
 | `body` | No | Request body (ignored for GET/HEAD) |
 
-**Response:** The upstream response is returned transparently — same status code and body.
+The upstream response is returned transparently — same status code and body.
 
 ### `GET /health`
 
 Returns `{"status": "ok", "services": ["openai", ...]}`. No auth required.
 
-## Environment Variables
-
-| Variable | Required | Default | Description |
-|---|---|---|---|
-| `AGENT_TOKEN` | If no `agents.yaml` | — | Legacy single token for all agents |
-| `PORT` | No | `8080` | Server port |
-| `SERVICES_CONFIG_PATH` | No | `services.yaml` | Path to services config file |
-| `AGENTS_CONFIG_PATH` | No | `agents.yaml` | Path to agents config file |
-| `OPENAI_API_KEY` | Per config | — | Example: real OpenAI key |
-
 ## Security
 
-### Threat model
+### What Sentinel prevents
 
-Sentinel prevents **key leakage through agents**. Specifically:
+- API keys appearing in agent logs, outputs, or context windows
+- Agents using the gateway as an open proxy to arbitrary hosts
+- Agents injecting their own auth headers to impersonate or exfiltrate
 
-- Agents never receive API keys — keys exist only in the gateway's environment
-- Agents cannot choose which hosts to contact — only services defined in `services.yaml` are reachable
-- Auth headers from agents are stripped — agents cannot override injected credentials
-- Request metadata logging only — secrets, headers, and bodies are never logged
+### What Sentinel does NOT prevent
 
-### What it prevents
+- **Stolen gateway tokens** — If a token is stolen, the attacker can make requests through the gateway (scoped to that agent's permissions). Mitigate with rate limits, IP allowlists, and token rotation.
+- **Upstream abuse** — Agents can still make valid but costly API calls. Use `rate_limit_per_minute` and `allowed_path_prefixes` to limit scope.
+- **Response exfiltration** — Agents see upstream responses. This is by design — they need the data to function.
 
-- API key appearing in agent logs, outputs, or context windows
-- Agent using the gateway as an open proxy to arbitrary hosts
-- Agent injecting its own auth headers to impersonate or exfiltrate
+### Hardening checklist
 
-### What it does NOT prevent
-
-- **Stolen gateway tokens**: If an attacker obtains a token, they can make requests through the gateway. Per-agent tokens limit blast radius — revoke one agent without affecting others. Rate limits and IP/Origin allowlists further mitigate abuse.
-- **Upstream abuse**: An agent can still make valid but costly API calls. Use `rate_limit_per_minute` and `allowed_path_prefixes` to limit scope.
-- **Response exfiltration**: The agent sees upstream responses. This is by design — the agent needs the data to function.
-
-### IP & Origin allowlists
-
-You can restrict which IPs and origins are allowed to use the gateway. This provides a network-level security layer — even if the agent token is stolen, requests are rejected unless they come from an approved source.
-
-- **Global allowlists** apply to all services unless a service defines its own
-- **Per-service allowlists** fully replace (not merge with) the global lists
-- If no allowlists are configured, all IPs and origins are allowed (backwards compatible)
-- IP allowlists support exact IPs and CIDR notation (e.g. `192.168.1.0/24`)
-- Origin is read from the `Origin` header, falling back to `Referer`
-- The gateway sets `trust proxy` so `req.ip` reflects `X-Forwarded-For` when behind a reverse proxy
-
-```yaml
-# Global: allow this subnet and one specific IP
-allowed_ips:
-  - 192.168.1.0/24
-  - 10.0.0.5
-allowed_origins:
-  - https://app.example.com
-
-services:
-  openai:
-    # This service overrides the global lists entirely
-    allowed_ips:
-      - 10.0.0.10
-    allowed_origins:
-      - https://agent.internal.com
-    ...
-```
-
-### Hardening recommendations
-
-- Use per-agent tokens (`agents.yaml`) instead of a single shared `AGENT_TOKEN`
-- Scope each agent to only the services it needs via `allowed_services`
-- Set per-agent `rate_limit_per_minute` and `allowed_ips` for defense in depth
+- Use per-agent tokens instead of a single shared `AGENT_TOKEN`
+- Scope each agent to only the services it needs
+- Set `rate_limit_per_minute` on every agent and service
+- Configure `allowed_ips` for agents running from known addresses
 - Restrict `allowed_methods` and `allowed_path_prefixes` to the minimum needed
-- Set appropriate per-service `rate_limit_per_minute` values
-- Configure `allowed_ips` and `allowed_origins` to restrict access to known sources
-- Run the gateway in a private network, not on the public internet
-- Rotate agent tokens regularly — each can be rotated independently
+- Run Sentinel on a **separate server** from your agents
+- Put Sentinel behind HTTPS (TLS termination via nginx, Caddy, or your platform)
+- Rotate agent tokens regularly
 
-### Header sanitization
+### Headers stripped from agent requests
 
-These headers are always stripped from agent requests:
-
-- `Authorization`
-- `Cookie` / `Set-Cookie`
-- `Proxy-Authorization`
-- `X-Api-Key`
-- `Host`
+`Authorization`, `Cookie`, `Set-Cookie`, `Proxy-Authorization`, `X-Api-Key`, `Host`
 
 ## Project structure
 
 ```
-├── src/
-│   ├── cli.ts          # CLI entry point (sentinel command)
-
-│   ├── index.ts        # Server bootstrap
-│   ├── types.ts        # TypeScript types
-│   ├── config.ts       # YAML config loader + validation
-│   ├── agentFile.ts    # YAML read/write for agents.yaml
-│   ├── tokenGen.ts     # Token generation utility
-│   ├── auth.ts         # Token auth middleware (factory pattern)
-│   ├── security.ts     # Header sanitization, IP checks, method/path checks
-│   ├── rateLimit.ts    # In-memory rate limiter
-│   └── proxy.ts        # Core proxy handler
-├── examples/
-│   └── agent-call-openai.ts  # Example agent script
-├── services.yaml       # Service definitions
-├── agents.yaml.example # Per-agent token config example
-├── Dockerfile
-├── package.json
-└── tsconfig.json
+src/
+  cli.ts          CLI entry point
+  index.ts        Server bootstrap
+  config.ts       YAML config loader + validation
+  agentFile.ts    agents.yaml read/write
+  tokenGen.ts     Token generation
+  auth.ts         Token auth middleware
+  adminApi.ts     Dashboard admin API
+  adminAuth.ts    Admin auth middleware
+  security.ts     Header sanitization, IP checks
+  rateLimit.ts    In-memory rate limiter
+  proxy.ts        Core proxy handler
+  types.ts        TypeScript types
+dashboard/        React web dashboard (Vite)
 ```
-
-## Self-Hosting
-
-Want to deploy Sentinel on your own infrastructure? See the **[Self-Hosting Guide](SELF-HOSTING.md)** for:
-
-- One-command Docker setup
-- Deploy to Railway / Render / Fly.io
-- Security checklist for production
-- Architecture diagram
-
-Quick start:
-
-```bash
-cp .env.example .env        # Add your API keys
-docker compose up -d         # Start Sentinel
-```
-
-> **Important:** Always run Sentinel on a separate server from your agents. See the [Self-Hosting Guide](SELF-HOSTING.md) for why.
 
 ## Contributing
 
 1. Fork the repo
 2. Create a feature branch
-3. Make your changes — keep them focused and minimal
+3. Make your changes
 4. Ensure `npm run build` passes
 5. Submit a pull request
-
-Please keep the project simple and focused. The goal is a minimal, safe-by-default credential proxy — not a full API management platform.
 
 ## License
 
