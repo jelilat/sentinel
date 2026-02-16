@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, Link } from "react-router-dom";
 import { apiFetch } from "../api";
 import ServiceForm, { type ServiceFormData } from "../components/ServiceForm";
 import type { Service } from "../types";
@@ -52,7 +52,16 @@ export default function ServiceDetailPage() {
 
   return (
     <div>
-      <h2>Edit: {service.name}</h2>
+      <div className="page-header">
+        <h2>Edit: {service.name}</h2>
+        <Link to="/services" className="btn btn-secondary">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="19" y1="12" x2="5" y2="12" />
+            <polyline points="12 19 5 12 12 5" />
+          </svg>
+          Back
+        </Link>
+      </div>
       {error && <p className="error">{error}</p>}
       <ServiceForm
         initialData={service}

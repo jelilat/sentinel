@@ -43,7 +43,7 @@ export default function LoginPage() {
             autoFocus
             required
           />
-          {error && <p className="error">{error}</p>}
+          {error && <p className="error" style={{ background: 'rgba(229, 62, 62, 0.15)', color: '#fc8181', border: 'none' }}>{error}</p>}
           <button type="submit" disabled={loading || !token}>
             {loading ? "Signing in..." : "Sign in"}
           </button>
