@@ -1,13 +1,3 @@
-# Sentinel - Service Definitions
-# Each service defines how the gateway proxies and authenticates requests.
-
-# Global IP/Origin allowlists (apply to all services unless overridden)
-# allowed_ips:
-#   - 192.168.1.0/24
-#   - 10.0.0.5
-# allowed_origins:
-#   - https://app.example.com
-
 services:
   openai:
     base_url: https://api.openai.com
@@ -16,7 +6,7 @@ services:
     auth:
       type: header
       header_name: Authorization
-      template: "Bearer ${SECRET}"
+      template: Bearer ${SECRET}
     secret_env: OPENAI_API_KEY
     allowed_methods:
       - GET
@@ -25,12 +15,6 @@ services:
       - /v1/
     timeout_ms: 60000
     rate_limit_per_minute: 60
-    # Per-service IP/Origin allowlists (override global lists, not merged)
-    # allowed_ips:
-    #   - 10.0.0.10
-    # allowed_origins:
-    #   - https://agent.internal.com
-
   anthropic:
     base_url: https://api.anthropic.com
     allowed_hosts:
@@ -38,7 +22,7 @@ services:
     auth:
       type: header
       header_name: x-api-key
-      template: "${SECRET}"
+      template: ${SECRET}
     secret_env: ANTHROPIC_API_KEY
     allowed_methods:
       - POST
@@ -46,8 +30,6 @@ services:
       - /v1/
     timeout_ms: 60000
     rate_limit_per_minute: 60
-
-  # Example: a generic weather API using query-param auth
   weather:
     base_url: https://api.weatherapi.com
     allowed_hosts:
@@ -55,7 +37,7 @@ services:
     auth:
       type: query
       query_param: key
-      template: "${SECRET}"
+      template: ${SECRET}
     secret_env: WEATHER_API_KEY
     allowed_methods:
       - GET

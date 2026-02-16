@@ -1,8 +1,12 @@
 node_modules
 dist
+dashboard/node_modules
+dashboard/dist
 .env
+.env.*
 *.log
 .git
 .gitignore
-README.md
-examples/
+.dockerignore
+*.md
+agents.yaml

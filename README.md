@@ -426,6 +426,24 @@ These headers are always stripped from agent requests:
 └── tsconfig.json
 ```
 
+## Self-Hosting
+
+Want to deploy Sentinel on your own infrastructure? See the **[Self-Hosting Guide](SELF-HOSTING.md)** for:
+
+- One-command Docker setup
+- Deploy to Railway / Render / Fly.io
+- Security checklist for production
+- Architecture diagram
+
+Quick start:
+
+```bash
+cp .env.example .env        # Add your API keys
+docker compose up -d         # Start Sentinel
+```
+
+> **Important:** Always run Sentinel on a separate server from your agents. See the [Self-Hosting Guide](SELF-HOSTING.md) for why.
+
 ## Contributing
 
 1. Fork the repo
