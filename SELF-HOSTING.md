@@ -17,7 +17,7 @@ Your agent (Machine A)  ──HTTPS──>  Sentinel (Machine B)  ──>  OpenA
 ### 1. Clone and configure
 
 ```bash
-git clone https://github.com/your-org/sentinel.git
+git clone https://github.com/jelilat/sentinel.git
 cd sentinel
 cp .env.example .env
 ```

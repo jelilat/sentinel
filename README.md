@@ -35,7 +35,7 @@ Sentinel gives you a single chokepoint: **one place to grant access, set limits,
 ### 1. Install and build
 
 ```bash
-git clone https://github.com/AgenHub/sentinel.git
+git clone https://github.com/jelilat/sentinel.git
 cd sentinel
 npm install
 npm run build
