@@ -4,7 +4,8 @@
   "description": "A proxy server that keeps API keys away from AI agents. Agents send requests here, and the gateway adds the real API key before forwarding to the external service.",
   "main": "dist/index.js",
   "bin": {
-    "sentinel": "dist/cli.js"
+    "sentinel": "dist/cli.js",
+    "sentinel-mcp": "dist/mcp.js"
   },
   "scripts": {
     "build": "tsc && npm run build:dashboard",
@@ -13,7 +14,8 @@
     "dev": "tsx src/index.ts",
     "dev:dashboard": "cd dashboard && npm run dev",
     "start": "node dist/index.js",
-    "dev:cli": "tsx src/cli.ts"
+    "dev:cli": "tsx src/cli.ts",
+    "dev:mcp": "tsx src/mcp.ts"
   },
   "keywords": [
     "ai",
@@ -25,9 +27,11 @@
   ],
   "license": "MIT",
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.26.0",
     "commander": "^14.0.3",
     "express": "^4.21.0",
-    "yaml": "^2.5.0"
+    "yaml": "^2.5.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",

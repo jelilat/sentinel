@@ -1,5 +1,7 @@
 # Sentinel
 
+> **Disclaimer:** This project is a work in progress and has not been audited.
+
 **Stop giving AI agents your API and wallet private keys.**
 
 Sentinel is a proxy that sits between your agents and external services. Your agents get a scoped gateway token. Sentinel holds the real credentials — API keys, private keys, secrets — injects them server-side, and forwards requests. If an agent is compromised, you revoke one token. The real keys never moved.
@@ -272,12 +274,90 @@ Returns `{"status": "ok", "services": ["openai", ...]}`. No auth required.
 
 `Authorization`, `Cookie`, `Set-Cookie`, `Proxy-Authorization`, `X-Api-Key`, `Host`
 
+## MCP Server
+
+Sentinel ships with a built-in [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server so that AI agents like OpenClaw, Cursor, and Claude Desktop can use Sentinel as a tool — no custom HTTP code needed.
+
+### Setup
+
+The MCP server connects to a **running** Sentinel instance. You need two environment variables:
+
+| Variable | Description |
+|---|---|
+| `SENTINEL_URL` | URL of your Sentinel instance (default: `http://localhost:8080`) |
+| `SENTINEL_AGENT_TOKEN` | Your agent's `agt_...` token |
+
+### Cursor
+
+Add to `.cursor/mcp.json` in your project (or global Cursor settings):
+
+```json
+{
+  "mcpServers": {
+    "sentinel": {
+      "command": "npx",
+      "args": ["-y", "sentinel-mcp"],
+      "env": {
+        "SENTINEL_URL": "http://localhost:8080",
+        "SENTINEL_AGENT_TOKEN": "agt_your_token_here"
+      }
+    }
+  }
+}
+```
+
+### Claude Desktop
+
+Add to `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "sentinel": {
+      "command": "npx",
+      "args": ["-y", "sentinel-mcp"],
+      "env": {
+        "SENTINEL_URL": "http://localhost:8080",
+        "SENTINEL_AGENT_TOKEN": "agt_your_token_here"
+      }
+    }
+  }
+}
+```
+
+### OpenClaw
+
+Use the built-in `mcporter` skill:
+
+```bash
+mcporter add sentinel -- npx -y sentinel-mcp
+mcporter config sentinel set SENTINEL_URL http://localhost:8080
+mcporter config sentinel set SENTINEL_AGENT_TOKEN agt_your_token_here
+```
+
+Then your OpenClaw agent can call Sentinel tools directly.
+
+### Available tools
+
+| Tool | Description |
+|---|---|
+| `sentinel_proxy` | Send a proxied request through Sentinel to an upstream service. Takes `service`, `method`, `path`, and optional `headers`/`body`. |
+| `sentinel_list_services` | List the services available on this Sentinel instance. |
+| `sentinel_health` | Check if the Sentinel gateway is reachable and healthy. |
+
+### Running locally during development
+
+```bash
+npm run dev:mcp
+```
+
 ## Project structure
 
 ```
 src/
   cli.ts          CLI entry point
   index.ts        Server bootstrap
+  mcp.ts          MCP server entry point
   config.ts       YAML config loader + validation
   agentFile.ts    agents.yaml read/write
   tokenGen.ts     Token generation
